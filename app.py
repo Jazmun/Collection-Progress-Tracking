@@ -24,7 +24,7 @@ def clean_numeric(val):
     val_str = str(val).replace("$", "").replace(",", "").strip()
     try:
         return float(val_str)
-    except ValueError:
+    except (ValueError, TypeError):
         return 0.0
 
 def parse_date(date_str):
@@ -59,42 +59,71 @@ def assign_bucket(due_date, as_of_date):
         return "120+ Days"
 
 # -----------------------------------------------------------------------------
-# MULTI-FORMAT PARSER (CSV, EXCEL, PDF)
+# FILE PARSER (CSV, EXCEL, PDF)
 # -----------------------------------------------------------------------------
 def load_comparison_file(uploaded_file):
     filename = uploaded_file.name.lower()
-    records = []
 
-    # 1. CSV or Excel
+    # 1. Handle CSV or Excel (e.g., QuickBooks A/R Detail reports)
     if filename.endswith(".csv") or filename.endswith(".xlsx") or filename.endswith(".xls"):
         if filename.endswith(".csv"):
             df = pd.read_csv(uploaded_file, dtype=str)
         else:
             df = pd.read_excel(uploaded_file, dtype=str)
 
-        # Normalize column header aliases
-        col_map = {}
+        inv_col = None
+        due_col = None
+        bal_col = None
+
+        # Prioritize exact and specific QuickBooks column matches
         for c in df.columns:
             clean_c = c.strip().lower()
-            if any(k in clean_c for k in ["inv", "invoice", "number", "num"]) and "date" not in clean_c:
-                col_map[c] = "Invoice Number"
-            elif any(k in clean_c for k in ["due", "due date"]):
-                col_map[c] = "Due Date"
-            elif any(k in clean_c for k in ["balance", "open", "bal", "amount", "total"]):
-                col_map[c] = "Balance Due"
+            if clean_c in ["open balance", "open_balance", "balance due", "balance"]:
+                bal_col = c
+            elif bal_col is None and clean_c in ["amount", "total", "net"]:
+                bal_col = c
 
-        df = df.rename(columns=col_map)
-        if "Invoice Number" in df.columns and "Balance Due" in df.columns:
-            df["Invoice Number"] = df["Invoice Number"].astype(str).str.strip()
-            df["Balance Due"] = df["Balance Due"].apply(clean_numeric)
-            if "Due Date" in df.columns:
-                df["Due Date"] = df["Due Date"].apply(parse_date)
+            if clean_c in ["num", "invoice number", "invoice #", "inv no", "inv #", "invoice"]:
+                inv_col = c
+
+            if clean_c in ["due date", "due_date", "duedate"]:
+                due_col = c
+
+        # Fallback keyword scan if exact terms not found
+        if not inv_col:
+            for c in df.columns:
+                clean_c = c.strip().lower()
+                if ("num" in clean_c or "inv" in clean_c) and "date" not in clean_c:
+                    inv_col = c
+                    break
+
+        if not bal_col:
+            for c in df.columns:
+                clean_c = c.strip().lower()
+                if "open" in clean_c or "balance" in clean_c:
+                    bal_col = c
+                    break
+
+        if not due_col:
+            for c in df.columns:
+                clean_c = c.strip().lower()
+                if "due" in clean_c:
+                    due_col = c
+                    break
+
+        if inv_col and bal_col:
+            out_df = pd.DataFrame()
+            out_df["Invoice Number"] = df[inv_col].astype(str).str.strip()
+            out_df["Balance Due"] = df[bal_col].apply(clean_numeric)
+            if due_col:
+                out_df["Due Date"] = df[due_col].apply(parse_date)
             else:
-                df["Due Date"] = None
-            return df[["Invoice Number", "Due Date", "Balance Due"]].dropna(subset=["Invoice Number"])
+                out_df["Due Date"] = None
+            return out_df.dropna(subset=["Invoice Number"]).drop_duplicates(subset=["Invoice Number"])
 
     # 2. PDF Fallback
     elif filename.endswith(".pdf"):
+        records = []
         with pdfplumber.open(io.BytesIO(uploaded_file.read())) as pdf:
             for page in pdf.pages:
                 tables = page.extract_tables()
@@ -122,11 +151,11 @@ def load_comparison_file(uploaded_file):
                                     "Balance Due": clean_numeric(bal_raw),
                                 })
 
-    if not records:
-        return pd.DataFrame(columns=["Invoice Number", "Due Date", "Balance Due"])
+        if records:
+            df_pdf = pd.DataFrame(records)
+            return df_pdf.drop_duplicates(subset=["Invoice Number"])
 
-    df = pd.DataFrame(records)
-    return df.drop_duplicates(subset=["Invoice Number"])
+    return pd.DataFrame(columns=["Invoice Number", "Due Date", "Balance Due"])
 
 def render_bucket_row_html(counts_dict):
     c_cur = counts_dict.get("Current", 0)
@@ -169,7 +198,7 @@ def render_bucket_row_html(counts_dict):
 # BASELINE LOAD
 # -----------------------------------------------------------------------------
 if not os.path.exists(BASELINE_CSV_PATH):
-    st.error(f"Missing master baseline file: `{BASELINE_CSV_PATH}` in your GitHub repository.")
+    st.error(f"Missing master baseline file: `{BASELINE_CSV_PATH}`. Make sure it is committed to your repository.")
     st.stop()
 
 df_baseline = pd.read_csv(BASELINE_CSV_PATH, dtype={"Invoice Number": str})
@@ -208,7 +237,7 @@ resolution_pct = 0.0
 if new_file is not None:
     df_new = load_comparison_file(new_file)
     if df_new.empty:
-        st.sidebar.warning("Could not identify invoice data. Showing baseline report only.")
+        st.sidebar.warning("Could not identify invoice data in uploaded file. Showing baseline report.")
     else:
         has_comparison = True
         baseline_nums = set(df_baseline["Invoice Number"].astype(str))
