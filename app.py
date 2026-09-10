@@ -12,7 +12,7 @@ st.set_page_config(
 )
 
 # -----------------------------------------------------------------------------
-# CONFIGURATION & 5-BUCKET AGING ENGINE
+# CONFIGURATION & CONSTANTS
 # -----------------------------------------------------------------------------
 BASELINE_CSV_PATH = "baseline_279_invoices.csv"
 BASELINE_DATE = date(2026, 8, 31)
@@ -28,7 +28,14 @@ def clean_numeric(val):
         return 0.0
 
 def parse_date(date_str):
-    date_str = str(date_str).strip()
+    if pd.isna(date_str) or date_str is None:
+        return None
+    if isinstance(date_str, (datetime, pd.Timestamp)):
+        return date_str.date()
+    if isinstance(date_str, date):
+        return date_str
+
+    date_str = str(date_str).strip().split(" ")[0]
     for fmt in ("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"):
         try:
             return datetime.strptime(date_str, fmt).date()
@@ -37,6 +44,8 @@ def parse_date(date_str):
     return None
 
 def assign_bucket(due_date, as_of_date):
+    if not due_date or pd.isna(due_date):
+        return "120+ Days"
     days_past = (as_of_date - due_date).days
     if days_past <= 0:
         return "Current"
@@ -49,34 +58,69 @@ def assign_bucket(due_date, as_of_date):
     else:
         return "120+ Days"
 
-def parse_new_pdf(file_bytes):
+# -----------------------------------------------------------------------------
+# MULTI-FORMAT PARSER (CSV, EXCEL, PDF)
+# -----------------------------------------------------------------------------
+def load_comparison_file(uploaded_file):
+    filename = uploaded_file.name.lower()
     records = []
-    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        for page in pdf.pages:
-            tables = page.extract_tables()
-            for table in tables:
-                for row in table:
-                    cells = [c.strip() if c else "" for c in row]
-                    if len(cells) < 8:
-                        continue
 
-                    due_dates = cells[1].split("\n")
-                    inv_nums = cells[2].split("\n")
-                    balances = cells[7].split("\n")
+    # 1. CSV or Excel
+    if filename.endswith(".csv") or filename.endswith(".xlsx") or filename.endswith(".xls"):
+        if filename.endswith(".csv"):
+            df = pd.read_csv(uploaded_file, dtype=str)
+        else:
+            df = pd.read_excel(uploaded_file, dtype=str)
 
-                    num_entries = max(len(inv_nums), len(due_dates), len(balances))
-                    for i in range(num_entries):
-                        inv_num_raw = inv_nums[i].strip() if i < len(inv_nums) else ""
-                        due_date_raw = due_dates[i].strip() if i < len(due_dates) else ""
-                        bal_raw = balances[i].strip() if i < len(balances) else ""
+        # Normalize column header aliases
+        col_map = {}
+        for c in df.columns:
+            clean_c = c.strip().lower()
+            if any(k in clean_c for k in ["inv", "invoice", "number", "num"]) and "date" not in clean_c:
+                col_map[c] = "Invoice Number"
+            elif any(k in clean_c for k in ["due", "due date"]):
+                col_map[c] = "Due Date"
+            elif any(k in clean_c for k in ["balance", "open", "bal", "amount", "total"]):
+                col_map[c] = "Balance Due"
 
-                        due_dt = parse_date(due_date_raw)
-                        if inv_num_raw.isdigit() and due_dt is not None:
-                            records.append({
-                                "Invoice Number": str(inv_num_raw),
-                                "Due Date": due_dt,
-                                "Balance Due": clean_numeric(bal_raw),
-                            })
+        df = df.rename(columns=col_map)
+        if "Invoice Number" in df.columns and "Balance Due" in df.columns:
+            df["Invoice Number"] = df["Invoice Number"].astype(str).str.strip()
+            df["Balance Due"] = df["Balance Due"].apply(clean_numeric)
+            if "Due Date" in df.columns:
+                df["Due Date"] = df["Due Date"].apply(parse_date)
+            else:
+                df["Due Date"] = None
+            return df[["Invoice Number", "Due Date", "Balance Due"]].dropna(subset=["Invoice Number"])
+
+    # 2. PDF Fallback
+    elif filename.endswith(".pdf"):
+        with pdfplumber.open(io.BytesIO(uploaded_file.read())) as pdf:
+            for page in pdf.pages:
+                tables = page.extract_tables()
+                for table in tables:
+                    for row in table:
+                        cells = [c.strip() if c else "" for c in row]
+                        if len(cells) < 8:
+                            continue
+
+                        due_dates = cells[1].split("\n")
+                        inv_nums = cells[2].split("\n")
+                        balances = cells[7].split("\n")
+
+                        num_entries = max(len(inv_nums), len(due_dates), len(balances))
+                        for i in range(num_entries):
+                            inv_raw = inv_nums[i].strip() if i < len(inv_nums) else ""
+                            due_raw = due_dates[i].strip() if i < len(due_dates) else ""
+                            bal_raw = balances[i].strip() if i < len(balances) else ""
+
+                            due_dt = parse_date(due_raw)
+                            if inv_raw.isdigit():
+                                records.append({
+                                    "Invoice Number": str(inv_raw),
+                                    "Due Date": due_dt,
+                                    "Balance Due": clean_numeric(bal_raw),
+                                })
 
     if not records:
         return pd.DataFrame(columns=["Invoice Number", "Due Date", "Balance Due"])
@@ -91,7 +135,6 @@ def render_bucket_row_html(counts_dict):
     c_6190 = counts_dict.get("61–90 Days", 0)
     c_120 = counts_dict.get("120+ Days", 0)
 
-    # Zero-indent string ensures markdown never triggers code-block formatting
     return (
         '<div class="bucket-row">'
         '<div class="bucket b-current">'
@@ -123,7 +166,7 @@ def render_bucket_row_html(counts_dict):
     )
 
 # -----------------------------------------------------------------------------
-# DATA ENGINE: LOAD BASELINE
+# BASELINE LOAD
 # -----------------------------------------------------------------------------
 if not os.path.exists(BASELINE_CSV_PATH):
     st.error(f"Missing master baseline file: `{BASELINE_CSV_PATH}` in your GitHub repository.")
@@ -136,28 +179,40 @@ df_baseline["Baseline Bucket"] = df_baseline["Due Date"].apply(lambda d: assign_
 
 total_baseline_count = len(df_baseline)
 total_baseline_balance = df_baseline["Balance Due"].sum()
-base_bucket_counts = df_baseline["Baseline Bucket"].value_counts().reindex(FIVE_BUCKETS, fill_value=0).to_dict()
+
+base_bucket_counts = {b: 0 for b in FIVE_BUCKETS}
+for k, v in df_baseline["Baseline Bucket"].value_counts().items():
+    if k in base_bucket_counts:
+        base_bucket_counts[k] = int(v)
 
 # -----------------------------------------------------------------------------
 # SIDEBAR CONTROLS
 # -----------------------------------------------------------------------------
 st.sidebar.markdown("### ⚙️ Collection Progress")
-new_file = st.sidebar.file_uploader("Upload Comparison Report (PDF)", type=["pdf"], key="new_pdf")
+new_file = st.sidebar.file_uploader(
+    "Upload Open Invoices (CSV, XLSX, or PDF)",
+    type=["csv", "xlsx", "xls", "pdf"],
+    key="comparison_file",
+)
 comparison_date = st.sidebar.date_input("As-Of Evaluation Date", value=date(2026, 9, 4))
 
 # -----------------------------------------------------------------------------
 # RECONCILIATION LOGIC
 # -----------------------------------------------------------------------------
-has_comparison = new_file is not None
+curr_bucket_counts = {b: 0 for b in FIVE_BUCKETS}
+has_comparison = False
+invoices_cleared = 0
+invoices_open = total_baseline_count
+resolution_pct = 0.0
 
-if has_comparison:
-    df_new = parse_new_pdf(new_file.read())
+if new_file is not None:
+    df_new = load_comparison_file(new_file)
     if df_new.empty:
-        st.sidebar.warning("Uploaded PDF parsed 0 rows. Showing baseline status only.")
-        has_comparison = False
+        st.sidebar.warning("Could not identify invoice data. Showing baseline report only.")
     else:
-        baseline_nums = set(df_baseline["Invoice Number"])
-        df_new_matched = df_new[df_new["Invoice Number"].isin(baseline_nums)].copy()
+        has_comparison = True
+        baseline_nums = set(df_baseline["Invoice Number"].astype(str))
+        df_new_matched = df_new[df_new["Invoice Number"].astype(str).isin(baseline_nums)].copy()
 
         merged = pd.merge(
             df_baseline,
@@ -173,19 +228,17 @@ if has_comparison:
 
         open_df = merged[merged["Is_Open"]].copy()
         open_df["Current Bucket"] = open_df["Due Date"].apply(lambda d: assign_bucket(d, comparison_date))
-        curr_bucket_counts = open_df["Current Bucket"].value_counts().reindex(FIVE_BUCKETS, fill_value=0).to_dict()
+
+        for k, v in open_df["Current Bucket"].value_counts().items():
+            if k in curr_bucket_counts:
+                curr_bucket_counts[k] = int(v)
 
         invoices_open = int(merged["Is_Open"].sum())
         invoices_cleared = total_baseline_count - invoices_open
         resolution_pct = (invoices_cleared / total_baseline_count * 100) if total_baseline_count > 0 else 0.0
-else:
-    invoices_cleared = 0
-    invoices_open = total_baseline_count
-    resolution_pct = 0.0
-    curr_bucket_counts = {k: 0 for k in FIVE_BUCKETS}
 
 # -----------------------------------------------------------------------------
-# HTML TEMPLATE BUILDER
+# HTML RENDERING
 # -----------------------------------------------------------------------------
 header_date_str = comparison_date.strftime("%b %-d, %Y")
 base_date_str = BASELINE_DATE.strftime("%m/%d/%Y")
@@ -193,7 +246,11 @@ comp_date_str = comparison_date.strftime("%m/%d/%Y")
 
 g1_html = render_bucket_row_html(base_bucket_counts)
 g2_html = render_bucket_row_html(curr_bucket_counts)
-g2_subtitle = "Upload comparison PDF in sidebar to track progress" if not has_comparison else f"{invoices_open} Original Baseline Invoices Open ({invoices_cleared} Invoices Cleared)"
+g2_subtitle = (
+    "Upload comparison file in sidebar to track progress"
+    if not has_comparison
+    else f"{invoices_open} Original Baseline Invoices Open ({invoices_cleared} Invoices Cleared)"
+)
 
 full_dashboard_html = f"""
 <style>
@@ -424,11 +481,10 @@ full_dashboard_html = f"""
 </div>
 """
 
-# st.html renders raw HTML/CSS without markdown interference
 st.html(full_dashboard_html)
 
 # -----------------------------------------------------------------------------
-# AUDIT DRILLDOWN TABLE
+# DETAILED AUDIT TABLE
 # -----------------------------------------------------------------------------
 with st.expander("🔍 View Master Ledger & Resolution Match Details", expanded=False):
     if has_comparison:
