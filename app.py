@@ -21,12 +21,10 @@ BASELINE_DATE = date(2026, 8, 31)
 FIVE_BUCKETS = ["Current", "1–30 Days", "31–60 Days", "61–90 Days", "120+ Days"]
 
 def get_logo_html():
-    """Convert local logo file to base64 for seamless inline HTML embedding."""
     if os.path.exists(LOGO_PATH):
         with open(LOGO_PATH, "rb") as f:
             encoded = base64.b64encode(f.read()).decode()
         return f'<img src="data:image/png;base64,{encoded}" alt="La Salle Logo" style="height: 52px; width: auto; object-fit: contain;" />'
-    # Fallback text if logo.png is not found
     return """
     <div>
         <div class="brand-title">La Salle</div>
@@ -179,29 +177,29 @@ def render_bucket_row_html(counts_dict):
     return (
         '<div class="bucket-row">'
         '<div class="bucket b-current">'
-        '<div class="bucket-header">Current</div>'
+        '<div class="bucket-header">CURRENT<br><span class="b-es">AL CORRIENTE</span></div>'
         f'<div class="bucket-qty">{c_cur}</div>'
-        '<div class="bucket-footer">Not Due Yet</div>'
+        '<div class="bucket-footer">NOT DUE YET<br><span class="f-es">POR VENCER</span></div>'
         '</div>'
         '<div class="bucket b-amber">'
-        '<div class="bucket-header">1–30 Days</div>'
+        '<div class="bucket-header">1–30 DAYS<br><span class="b-es">1–30 DÍAS</span></div>'
         f'<div class="bucket-qty">{c_130}</div>'
-        '<div class="bucket-footer">Past Due</div>'
+        '<div class="bucket-footer">PAST DUE<br><span class="f-es">VENCIDAS</span></div>'
         '</div>'
         '<div class="bucket">'
-        '<div class="bucket-header">31–60 Days</div>'
+        '<div class="bucket-header">31–60 DAYS<br><span class="b-es">31–60 DÍAS</span></div>'
         f'<div class="bucket-qty">{c_3160}</div>'
-        '<div class="bucket-footer">Past Due</div>'
+        '<div class="bucket-footer">PAST DUE<br><span class="f-es">VENCIDAS</span></div>'
         '</div>'
         '<div class="bucket">'
-        '<div class="bucket-header">61–90 Days</div>'
+        '<div class="bucket-header">61–90 DAYS<br><span class="b-es">61–90 DÍAS</span></div>'
         f'<div class="bucket-qty">{c_6190}</div>'
-        '<div class="bucket-footer">Past Due</div>'
+        '<div class="bucket-footer">PAST DUE<br><span class="f-es">VENCIDAS</span></div>'
         '</div>'
         '<div class="bucket b-red">'
-        '<div class="bucket-header">120+ Days</div>'
+        '<div class="bucket-header">120+ DAYS<br><span class="b-es">120+ DÍAS</span></div>'
         f'<div class="bucket-qty">{c_120}</div>'
-        '<div class="bucket-footer">Past Due</div>'
+        '<div class="bucket-footer">PAST DUE<br><span class="f-es">VENCIDAS</span></div>'
         '</div>'
         '</div>'
     )
@@ -229,13 +227,13 @@ for k, v in df_baseline["Baseline Bucket"].value_counts().items():
 # -----------------------------------------------------------------------------
 # SIDEBAR CONTROLS
 # -----------------------------------------------------------------------------
-st.sidebar.markdown("### ⚙️ Collection Progress")
+st.sidebar.markdown("### ⚙️ Collection Progress / Progreso de Cobranza")
 new_file = st.sidebar.file_uploader(
-    "Upload Open Invoices (CSV, XLSX, or PDF)",
+    "Upload Open Invoices / Subir Facturas Abiertas (CSV, XLSX, PDF)",
     type=["csv", "xlsx", "xls", "pdf"],
     key="comparison_file",
 )
-comparison_date = st.sidebar.date_input("As-Of Evaluation Date", value=date(2026, 9, 4))
+comparison_date = st.sidebar.date_input("As-Of Date / Fecha de Corte", value=date(2026, 9, 4))
 
 # -----------------------------------------------------------------------------
 # RECONCILIATION LOGIC
@@ -249,7 +247,7 @@ resolution_pct = 0.0
 if new_file is not None:
     df_new = load_comparison_file(new_file)
     if df_new.empty:
-        st.sidebar.warning("Could not identify invoice data in uploaded file. Showing baseline report.")
+        st.sidebar.warning("Could not identify invoice data. Showing baseline report.")
     else:
         has_comparison = True
         baseline_nums = set(df_baseline["Invoice Number"].astype(str))
@@ -279,7 +277,7 @@ if new_file is not None:
         resolution_pct = (invoices_cleared / total_baseline_count * 100) if total_baseline_count > 0 else 0.0
 
 # -----------------------------------------------------------------------------
-# HTML RENDERING
+# HTML RENDERING (BILINGUAL DASHBOARD)
 # -----------------------------------------------------------------------------
 header_date_str = comparison_date.strftime("%b %-d, %Y")
 base_date_str = BASELINE_DATE.strftime("%m/%d/%Y")
@@ -288,10 +286,11 @@ comp_date_str = comparison_date.strftime("%m/%d/%Y")
 g1_html = render_bucket_row_html(base_bucket_counts)
 g2_html = render_bucket_row_html(curr_bucket_counts)
 logo_markup = get_logo_html()
+
 g2_subtitle = (
-    "Upload comparison file in sidebar to track progress"
+    "Upload comparison file in sidebar / Suba archivo en el panel izquierdo"
     if not has_comparison
-    else f"{invoices_open} Original Baseline Invoices Open ({invoices_cleared} Invoices Cleared)"
+    else f"{invoices_open} Open Invoices / Abiertas ({invoices_cleared} Cleared / Saldadas)"
 )
 
 full_dashboard_html = f"""
@@ -322,34 +321,29 @@ full_dashboard_html = f"""
     align-items: center;
     gap: 16px;
   }}
-  .brand-title {{
-    font-size: 26px;
-    font-weight: 900;
-    color: #00874e;
-    line-height: 1;
-  }}
-  .brand-sub {{
-    font-size: 14px;
-    font-weight: 700;
-    color: #78350f;
-    font-style: italic;
-    margin-top: 4px;
-  }}
   .header-meta {{
     text-align: right;
   }}
   .header-meta h2 {{
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 800;
     color: #1e293b;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     margin: 0;
   }}
+  .header-meta .sub-es {{
+    font-size: 13px;
+    color: #00874e;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-top: 1px;
+  }}
   .header-meta p {{
-    font-size: 12px;
+    font-size: 11.5px;
     color: #64748b;
-    margin-top: 4px;
+    margin-top: 3px;
     font-weight: 500;
     margin-bottom: 0;
   }}
@@ -358,110 +352,139 @@ full_dashboard_html = f"""
     grid-template-columns: repeat(4, 1fr);
     background: #f8fafc;
     border-bottom: 1px solid #e2e8f0;
-    padding: 16px 36px;
+    padding: 14px 24px;
   }}
   .summary-item {{
     text-align: center;
     border-right: 1px solid #e2e8f0;
+    padding: 0 8px;
   }}
   .summary-item:last-child {{ border-right: none; }}
   .summary-item .label {{
-    font-size: 11px;
+    font-size: 10.5px;
     text-transform: uppercase;
-    font-weight: 700;
+    font-weight: 800;
+    color: #334155;
+    letter-spacing: 0.4px;
+    line-height: 1.25;
+  }}
+  .summary-item .label-es {{
+    display: block;
+    font-size: 9.5px;
+    font-weight: 600;
     color: #64748b;
-    letter-spacing: 0.5px;
   }}
   .summary-item .value {{
     font-size: 24px;
     font-weight: 900;
     color: #0f172a;
-    margin-top: 2px;
+    margin-top: 3px;
   }}
-  .summary-item .value.green {{ color: #00874e; }}
-  .summary-item .value.amber {{ color: #d97706; }}
+  .summary-item .value.green {{ color: #00874e; }
+  .summary-item .value.amber {{ color: #d97706; }
   .content {{
-    padding: 30px 36px;
+    padding: 26px 36px;
     display: flex;
     flex-direction: column;
-    gap: 26px;
+    gap: 22px;
   }}
   .graphic-card {{
     background: #ffffff;
     border: 1px solid #cbd5e1;
     border-radius: 12px;
-    padding: 20px 24px;
+    padding: 18px 20px;
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
   }}
   .card-top {{
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    margin-bottom: 16px;
-    padding-bottom: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
     border-bottom: 1px solid #f1f5f9;
   }}
   .card-top h3 {{
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.4px;
     margin: 0;
   }}
-  .card-top h3.green {{ color: #00874e; }}
-  .card-top h3.amber {{ color: #b45309; }}
-  .card-top span {{
+  .card-top h3 .title-es {{
     font-size: 12px;
+    font-weight: 600;
+    color: #64748b;
+    margin-left: 4px;
+  }}
+  .card-top h3.green {{ color: #00874e; }
+  .card-top h3.amber {{ color: #b45309; }
+  .card-top span {{
+    font-size: 11.5px;
     color: #64748b;
     font-weight: 600;
   }}
   .bucket-row {{
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 12px;
+    gap: 10px;
   }}
   .bucket {{
     border-radius: 10px;
-    padding: 18px 10px;
+    padding: 14px 6px;
     text-align: center;
     border: 1px solid #e2e8f0;
     background: #f8fafc;
   }}
   .bucket-header {{
-    font-size: 12px;
-    font-weight: 700;
+    font-size: 11px;
+    font-weight: 800;
     text-transform: uppercase;
-    color: #475569;
-    margin-bottom: 8px;
+    color: #334155;
+    line-height: 1.2;
+    margin-bottom: 6px;
+  }}
+  .bucket-header .b-es {{
+    font-size: 9px;
+    font-weight: 600;
+    color: #64748b;
   }}
   .bucket-qty {{
-    font-size: 34px;
+    font-size: 32px;
     font-weight: 900;
     line-height: 1;
     color: #0f172a;
+    margin: 4px 0;
   }}
   .bucket-footer {{
-    font-size: 10px;
-    color: #94a3b8;
+    font-size: 9.5px;
+    color: #475569;
     text-transform: uppercase;
-    margin-top: 8px;
+    font-weight: 700;
+    line-height: 1.2;
+  }}
+  .bucket-footer .f-es {{
+    font-size: 8.5px;
     font-weight: 600;
+    color: #94a3b8;
   }}
   .bucket.b-current {{
     background: #f0fdf4;
     border-color: #bbf7d0;
   }}
-  .bucket.b-current .bucket-qty {{ color: #16a34a; }}
+  .bucket.b-current .bucket-qty {{ color: #16a34a; }
+  .bucket.b-current .bucket-header { color: #166534; }
   .bucket.b-amber {{
     background: #fffbeb;
     border-color: #fde68a;
   }}
-  .bucket.b-amber .bucket-qty {{ color: #d97706; }}
+  .bucket.b-amber .bucket-qty {{ color: #d97706; }
+  .bucket.b-amber .bucket-header { color: #854d0e; }
   .bucket.b-red {{
     background: #fef2f2;
     border-color: #fecaca;
   }}
-  .bucket.b-red .bucket-qty {{ color: #dc2626; }}
+  .bucket.b-red .bucket-qty {{ color: #dc2626; }
+  .bucket.b-red .bucket-header { color: #991b1b; }
 </style>
 
 <div class="dashboard-wrapper">
@@ -472,25 +495,26 @@ full_dashboard_html = f"""
       </div>
       <div class="header-meta">
         <h2>A/R Aging & Collections Tracker</h2>
-        <p>Due Date Basis &bull; Master {total_baseline_count} Baseline Progress (As of {header_date_str})</p>
+        <div class="sub-es">Antigüedad de Saldos y Cobranza</div>
+        <p>Master {total_baseline_count} Baseline &bull; As of / Al {header_date_str}</p>
       </div>
     </div>
 
     <div class="summary-strip">
       <div class="summary-item">
-        <div class="label">Starting Baseline</div>
+        <div class="label">STARTING BASELINE <span class="label-es">BASE INICIAL</span></div>
         <div class="value">{total_baseline_count}</div>
       </div>
       <div class="summary-item">
-        <div class="label">Invoices Cleared</div>
+        <div class="label">INVOICES CLEARED <span class="label-es">FACTURAS SALDADAS</span></div>
         <div class="value green">{invoices_cleared}</div>
       </div>
       <div class="summary-item">
-        <div class="label">Remaining Open</div>
+        <div class="label">REMAINING OPEN <span class="label-es">PENDIENTES DE PAGO</span></div>
         <div class="value amber">{invoices_open}</div>
       </div>
       <div class="summary-item">
-        <div class="label">Resolution Rate</div>
+        <div class="label">RESOLUTION RATE <span class="label-es">% DE RESOLUCIÓN</span></div>
         <div class="value green">{resolution_pct:.1f}%</div>
       </div>
     </div>
@@ -498,7 +522,7 @@ full_dashboard_html = f"""
     <div class="content">
       <div class="graphic-card">
         <div class="card-top">
-          <h3 class="green">Graphic 1: Baseline Open Invoices (As of {base_date_str})</h3>
+          <h3 class="green">Graphic 1: Baseline Open Invoices <span class="title-es">(Facturas Abiertas al {base_date_str})</span></h3>
           <span>Original Master List: {total_baseline_count} Invoices (${total_baseline_balance:,.2f})</span>
         </div>
         {g1_html}
@@ -506,7 +530,7 @@ full_dashboard_html = f"""
 
       <div class="graphic-card">
         <div class="card-top">
-          <h3 class="amber">Graphic 2: Baseline Collection Progress (As of {comp_date_str})</h3>
+          <h3 class="amber">Graphic 2: Baseline Collection Progress <span class="title-es">(Progreso de Cobranza al {comp_date_str})</span></h3>
           <span>{g2_subtitle}</span>
         </div>
         {g2_html}
@@ -519,9 +543,9 @@ full_dashboard_html = f"""
 st.html(full_dashboard_html)
 
 # -----------------------------------------------------------------------------
-# DETAILED AUDIT TABLE
+# DETAILED AUDIT TABLE (BILINGUAL LABELS)
 # -----------------------------------------------------------------------------
-with st.expander("🔍 View Master Ledger & Resolution Match Details", expanded=False):
+with st.expander("🔍 View Master Ledger / Ver Detalle de Facturas", expanded=False):
     if has_comparison:
         audit_table = merged[[
             "Invoice Number",
@@ -535,31 +559,32 @@ with st.expander("🔍 View Master Ledger & Resolution Match Details", expanded=
         ]].copy()
 
         audit_table["Status"] = audit_table["Is_Open"].apply(
-            lambda x: "Active / Open" if x else "Resolved / Paid"
+            lambda x: "Active / Pendiente" if x else "Resolved / Pagada"
         )
         audit_table["Balance Due_base"] = audit_table["Balance Due_base"].map("${:,.2f}".format)
         audit_table["Balance Due_new"] = audit_table["Balance Due_new"].map("${:,.2f}".format)
         audit_table["Cleared Amount"] = audit_table["Cleared Amount"].map("${:,.2f}".format)
         audit_table = audit_table.drop(columns=["Is_Open"])
         audit_table.columns = [
-            "Invoice #",
-            "Customer",
-            "Due Date",
-            "8/31 Bucket",
-            "Baseline Balance",
-            "Current Balance",
-            "Amount Cleared",
-            "Status",
+            "Invoice # / Factura",
+            "Customer / Cliente",
+            "Due Date / Vencimiento",
+            "8/31 Aging / Antigüedad",
+            "Baseline Balance / Saldo Base",
+            "Open Balance / Saldo Actual",
+            "Cleared / Monto Pagado",
+            "Status / Estado",
         ]
 
         filter_sel = st.radio(
-            "Filter ledger:", ["All Baseline Invoices", "Only Remaining Open", "Only Cleared / Paid"],
+            "Filter ledger / Filtrar reporte:",
+            ["All Baseline Invoices / Todas", "Only Remaining Open / Solo Pendientes", "Only Cleared / Solo Pagadas"],
             horizontal=True,
         )
-        if filter_sel == "Only Remaining Open":
-            audit_table = audit_table[audit_table["Status"] == "Active / Open"]
-        elif filter_sel == "Only Cleared / Paid":
-            audit_table = audit_table[audit_table["Status"] == "Resolved / Paid"]
+        if "Solo Pendientes" in filter_sel:
+            audit_table = audit_table[audit_table["Status / Estado"] == "Active / Pendiente"]
+        elif "Solo Pagadas" in filter_sel:
+            audit_table = audit_table[audit_table["Status / Estado"] == "Resolved / Pagada"]
 
         st.dataframe(audit_table, use_container_width=True, hide_index=True)
     else:
