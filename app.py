@@ -380,8 +380,8 @@ full_dashboard_html = f"""
     color: #0f172a;
     margin-top: 3px;
   }}
-  .summary-item .value.green {{ color: #00874e; }
-  .summary-item .value.amber {{ color: #d97706; }
+  .summary-item .value.green {{ color: #00874e; }}
+  .summary-item .value.amber {{ color: #d97706; }}
   .content {{
     padding: 26px 36px;
     display: flex;
@@ -416,8 +416,8 @@ full_dashboard_html = f"""
     color: #64748b;
     margin-left: 4px;
   }}
-  .card-top h3.green {{ color: #00874e; }
-  .card-top h3.amber {{ color: #b45309; }
+  .card-top h3.green {{ color: #00874e; }}
+  .card-top h3.amber {{ color: #b45309; }}
   .card-top span {{
     font-size: 11.5px;
     color: #64748b;
@@ -471,20 +471,20 @@ full_dashboard_html = f"""
     background: #f0fdf4;
     border-color: #bbf7d0;
   }}
-  .bucket.b-current .bucket-qty {{ color: #16a34a; }
-  .bucket.b-current .bucket-header { color: #166534; }
+  .bucket.b-current .bucket-qty {{ color: #16a34a; }}
+  .bucket.b-current .bucket-header {{ color: #166534; }}
   .bucket.b-amber {{
     background: #fffbeb;
     border-color: #fde68a;
   }}
-  .bucket.b-amber .bucket-qty {{ color: #d97706; }
-  .bucket.b-amber .bucket-header { color: #854d0e; }
+  .bucket.b-amber .bucket-qty {{ color: #d97706; }}
+  .bucket.b-amber .bucket-header {{ color: #854d0e; }}
   .bucket.b-red {{
     background: #fef2f2;
     border-color: #fecaca;
   }}
-  .bucket.b-red .bucket-qty {{ color: #dc2626; }
-  .bucket.b-red .bucket-header { color: #991b1b; }
+  .bucket.b-red .bucket-qty {{ color: #dc2626; }}
+  .bucket.b-red .bucket-header {{ color: #991b1b; }}
 </style>
 
 <div class="dashboard-wrapper">
