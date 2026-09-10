@@ -1,3 +1,4 @@
+import base64
 import io
 import os
 from datetime import date, datetime
@@ -15,8 +16,23 @@ st.set_page_config(
 # CONFIGURATION & CONSTANTS
 # -----------------------------------------------------------------------------
 BASELINE_CSV_PATH = "baseline_279_invoices.csv"
+LOGO_PATH = "logo.png"
 BASELINE_DATE = date(2026, 8, 31)
 FIVE_BUCKETS = ["Current", "1–30 Days", "31–60 Days", "61–90 Days", "120+ Days"]
+
+def get_logo_html():
+    """Convert local logo file to base64 for seamless inline HTML embedding."""
+    if os.path.exists(LOGO_PATH):
+        with open(LOGO_PATH, "rb") as f:
+            encoded = base64.b64encode(f.read()).decode()
+        return f'<img src="data:image/png;base64,{encoded}" alt="La Salle Logo" style="height: 52px; width: auto; object-fit: contain;" />'
+    # Fallback text if logo.png is not found
+    return """
+    <div>
+        <div class="brand-title">La Salle</div>
+        <div class="brand-sub">Landscaping & Tree Service</div>
+    </div>
+    """
 
 def clean_numeric(val):
     if pd.isna(val) or val is None:
@@ -64,7 +80,6 @@ def assign_bucket(due_date, as_of_date):
 def load_comparison_file(uploaded_file):
     filename = uploaded_file.name.lower()
 
-    # 1. Handle CSV or Excel (e.g., QuickBooks A/R Detail reports)
     if filename.endswith(".csv") or filename.endswith(".xlsx") or filename.endswith(".xls"):
         if filename.endswith(".csv"):
             df = pd.read_csv(uploaded_file, dtype=str)
@@ -75,7 +90,6 @@ def load_comparison_file(uploaded_file):
         due_col = None
         bal_col = None
 
-        # Prioritize exact and specific QuickBooks column matches
         for c in df.columns:
             clean_c = c.strip().lower()
             if clean_c in ["open balance", "open_balance", "balance due", "balance"]:
@@ -89,7 +103,6 @@ def load_comparison_file(uploaded_file):
             if clean_c in ["due date", "due_date", "duedate"]:
                 due_col = c
 
-        # Fallback keyword scan if exact terms not found
         if not inv_col:
             for c in df.columns:
                 clean_c = c.strip().lower()
@@ -121,7 +134,6 @@ def load_comparison_file(uploaded_file):
                 out_df["Due Date"] = None
             return out_df.dropna(subset=["Invoice Number"]).drop_duplicates(subset=["Invoice Number"])
 
-    # 2. PDF Fallback
     elif filename.endswith(".pdf"):
         records = []
         with pdfplumber.open(io.BytesIO(uploaded_file.read())) as pdf:
@@ -198,7 +210,7 @@ def render_bucket_row_html(counts_dict):
 # BASELINE LOAD
 # -----------------------------------------------------------------------------
 if not os.path.exists(BASELINE_CSV_PATH):
-    st.error(f"Missing master baseline file: `{BASELINE_CSV_PATH}`. Make sure it is committed to your repository.")
+    st.error(f"Missing master baseline file: `{BASELINE_CSV_PATH}` in your GitHub repository.")
     st.stop()
 
 df_baseline = pd.read_csv(BASELINE_CSV_PATH, dtype={"Invoice Number": str})
@@ -275,6 +287,7 @@ comp_date_str = comparison_date.strftime("%m/%d/%Y")
 
 g1_html = render_bucket_row_html(base_bucket_counts)
 g2_html = render_bucket_row_html(curr_bucket_counts)
+logo_markup = get_logo_html()
 g2_subtitle = (
     "Upload comparison file in sidebar to track progress"
     if not has_comparison
@@ -300,14 +313,14 @@ full_dashboard_html = f"""
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 24px 36px;
+    padding: 20px 36px;
     background: #ffffff;
     border-bottom: 2px solid #e2e8f0;
   }}
   .brand-group {{
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 16px;
   }}
   .brand-title {{
     font-size: 26px;
@@ -455,14 +468,7 @@ full_dashboard_html = f"""
   <div class="dashboard">
     <div class="header">
       <div class="brand-group">
-        <svg width="46" height="46" viewBox="0 0 100 100" fill="none">
-          <path d="M50 5 L58 32 L78 22 L72 45 L95 50 L75 62 L85 85 L60 75 L50 95 L40 75 L15 85 L25 62 L5 50 L28 45 L22 22 L42 32 Z" fill="#00874e"/>
-          <path d="M50 5 L50 95" stroke="#ffffff" stroke-width="2"/>
-        </svg>
-        <div>
-          <div class="brand-title">La Salle</div>
-          <div class="brand-sub">Landscaping & Tree Service</div>
-        </div>
+        {logo_markup}
       </div>
       <div class="header-meta">
         <h2>A/R Aging & Collections Tracker</h2>
