@@ -12,191 +12,6 @@ st.set_page_config(
 )
 
 # -----------------------------------------------------------------------------
-# CSS THEME & SHELL STYLING
-# -----------------------------------------------------------------------------
-st.markdown(
-    """
-    <style>
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      
-      .stApp {
-        background: #0f172a;
-      }
-      .main .block-container {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-        max-width: 1040px;
-      }
-      .dashboard {
-        width: 960px;
-        background: #ffffff;
-        border-radius: 16px;
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
-        overflow: hidden;
-        margin: 0 auto;
-      }
-      .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 24px 36px;
-        background: #ffffff;
-        border-bottom: 2px solid #e2e8f0;
-      }
-      .brand-group {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-      }
-      .brand-title {
-        font-size: 26px;
-        font-weight: 900;
-        color: #00874e;
-        line-height: 1;
-      }
-      .brand-sub {
-        font-size: 14px;
-        font-weight: 700;
-        color: #78350f;
-        font-style: italic;
-        margin-top: 4px;
-      }
-      .header-meta {
-        text-align: right;
-      }
-      .header-meta h2 {
-        font-size: 17px;
-        font-weight: 800;
-        color: #1e293b;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-      .header-meta p {
-        font-size: 12px;
-        color: #64748b;
-        margin-top: 4px;
-        font-weight: 500;
-      }
-      .summary-strip {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        background: #f8fafc;
-        border-bottom: 1px solid #e2e8f0;
-        padding: 16px 36px;
-      }
-      .summary-item {
-        text-align: center;
-        border-right: 1px solid #e2e8f0;
-      }
-      .summary-item:last-child { border-right: none; }
-      .summary-item .label {
-        font-size: 11px;
-        text-transform: uppercase;
-        font-weight: 700;
-        color: #64748b;
-        letter-spacing: 0.5px;
-      }
-      .summary-item .value {
-        font-size: 24px;
-        font-weight: 900;
-        color: #0f172a;
-        margin-top: 2px;
-      }
-      .summary-item .value.green { color: #00874e; }
-      .summary-item .value.amber { color: #d97706; }
-
-      .content {
-        padding: 30px 36px;
-        display: flex;
-        flex-direction: column;
-        gap: 26px;
-      }
-      .graphic-card {
-        background: #ffffff;
-        border: 1px solid #cbd5e1;
-        border-radius: 12px;
-        padding: 20px 24px;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-      }
-      .card-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        margin-bottom: 16px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid #f1f5f9;
-      }
-      .card-top h3 {
-        font-size: 15px;
-        font-weight: 800;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-      .card-top h3.green { color: #00874e; }
-      .card-top h3.amber { color: #b45309; }
-      .card-top span {
-        font-size: 12px;
-        color: #64748b;
-        font-weight: 600;
-      }
-      .bucket-row {
-        display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 12px;
-      }
-      .bucket {
-        border-radius: 10px;
-        padding: 18px 10px;
-        text-align: center;
-        border: 1px solid #e2e8f0;
-        background: #f8fafc;
-      }
-      .bucket-header {
-        font-size: 12px;
-        font-weight: 700;
-        text-transform: uppercase;
-        color: #475569;
-        margin-bottom: 8px;
-      }
-      .bucket-qty {
-        font-size: 34px;
-        font-weight: 900;
-        line-height: 1;
-        color: #0f172a;
-      }
-      .bucket-footer {
-        font-size: 10px;
-        color: #94a3b8;
-        text-transform: uppercase;
-        margin-top: 8px;
-        font-weight: 600;
-      }
-      .bucket.b-current {
-        background: #f0fdf4;
-        border-color: #bbf7d0;
-      }
-      .bucket.b-current .bucket-qty { color: #16a34a; }
-
-      .bucket.b-amber {
-        background: #fffbeb;
-        border-color: #fde68a;
-      }
-      .bucket.b-amber .bucket-qty { color: #d97706; }
-
-      .bucket.b-red {
-        background: #fef2f2;
-        border-color: #fecaca;
-      }
-      .bucket.b-red .bucket-qty { color: #dc2626; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-# -----------------------------------------------------------------------------
 # CONFIGURATION & 5-BUCKET AGING ENGINE
 # -----------------------------------------------------------------------------
 BASELINE_CSV_PATH = "baseline_279_invoices.csv"
@@ -222,7 +37,6 @@ def parse_date(date_str):
     return None
 
 def assign_bucket(due_date, as_of_date):
-    """5-Bucket rule: combines 91+ into 120+ Days to match template design."""
     days_past = (as_of_date - due_date).days
     if days_past <= 0:
         return "Current"
@@ -271,39 +85,45 @@ def parse_new_pdf(file_bytes):
     return df.drop_duplicates(subset=["Invoice Number"])
 
 def render_bucket_row_html(counts_dict):
-    """Render the 5-bucket flex card deck."""
-    return f"""
-    <div class="bucket-row">
-      <div class="bucket b-current">
-        <div class="bucket-header">Current</div>
-        <div class="bucket-qty">{counts_dict.get('Current', 0)}</div>
-        <div class="bucket-footer">Not Due Yet</div>
-      </div>
-      <div class="bucket b-amber">
-        <div class="bucket-header">1–30 Days</div>
-        <div class="bucket-qty">{counts_dict.get('1–30 Days', 0)}</div>
-        <div class="bucket-footer">Past Due</div>
-      </div>
-      <div class="bucket">
-        <div class="bucket-header">31–60 Days</div>
-        <div class="bucket-qty">{counts_dict.get('31–60 Days', 0)}</div>
-        <div class="bucket-footer">Past Due</div>
-      </div>
-      <div class="bucket">
-        <div class="bucket-header">61–90 Days</div>
-        <div class="bucket-qty">{counts_dict.get('61–90 Days', 0)}</div>
-        <div class="bucket-footer">Past Due</div>
-      </div>
-      <div class="bucket b-red">
-        <div class="bucket-header">120+ Days</div>
-        <div class="bucket-qty">{counts_dict.get('120+ Days', 0)}</div>
-        <div class="bucket-footer">Past Due</div>
-      </div>
-    </div>
-    """
+    c_cur = counts_dict.get("Current", 0)
+    c_130 = counts_dict.get("1–30 Days", 0)
+    c_3160 = counts_dict.get("31–60 Days", 0)
+    c_6190 = counts_dict.get("61–90 Days", 0)
+    c_120 = counts_dict.get("120+ Days", 0)
+
+    # Zero-indent string ensures markdown never triggers code-block formatting
+    return (
+        '<div class="bucket-row">'
+        '<div class="bucket b-current">'
+        '<div class="bucket-header">Current</div>'
+        f'<div class="bucket-qty">{c_cur}</div>'
+        '<div class="bucket-footer">Not Due Yet</div>'
+        '</div>'
+        '<div class="bucket b-amber">'
+        '<div class="bucket-header">1–30 Days</div>'
+        f'<div class="bucket-qty">{c_130}</div>'
+        '<div class="bucket-footer">Past Due</div>'
+        '</div>'
+        '<div class="bucket">'
+        '<div class="bucket-header">31–60 Days</div>'
+        f'<div class="bucket-qty">{c_3160}</div>'
+        '<div class="bucket-footer">Past Due</div>'
+        '</div>'
+        '<div class="bucket">'
+        '<div class="bucket-header">61–90 Days</div>'
+        f'<div class="bucket-qty">{c_6190}</div>'
+        '<div class="bucket-footer">Past Due</div>'
+        '</div>'
+        '<div class="bucket b-red">'
+        '<div class="bucket-header">120+ Days</div>'
+        f'<div class="bucket-qty">{c_120}</div>'
+        '<div class="bucket-footer">Past Due</div>'
+        '</div>'
+        '</div>'
+    )
 
 # -----------------------------------------------------------------------------
-# DATA ENGINE: LOAD REPOSITORY BASELINE
+# DATA ENGINE: LOAD BASELINE
 # -----------------------------------------------------------------------------
 if not os.path.exists(BASELINE_CSV_PATH):
     st.error(f"Missing master baseline file: `{BASELINE_CSV_PATH}` in your GitHub repository.")
@@ -337,7 +157,6 @@ if has_comparison:
         has_comparison = False
     else:
         baseline_nums = set(df_baseline["Invoice Number"])
-        # Match only the baseline's 279 invoices, ignore new or non-baseline invoices
         df_new_matched = df_new[df_new["Invoice Number"].isin(baseline_nums)].copy()
 
         merged = pd.merge(
@@ -366,75 +185,247 @@ else:
     curr_bucket_counts = {k: 0 for k in FIVE_BUCKETS}
 
 # -----------------------------------------------------------------------------
-# RENDER CUSTOM HTML DASHBOARD
+# HTML TEMPLATE BUILDER
 # -----------------------------------------------------------------------------
 header_date_str = comparison_date.strftime("%b %-d, %Y")
 base_date_str = BASELINE_DATE.strftime("%m/%d/%Y")
 comp_date_str = comparison_date.strftime("%m/%d/%Y")
 
-dashboard_html = f"""
-<div class="dashboard">
-  <!-- Header with Brand Identification -->
-  <div class="header">
-    <div class="brand-group">
-      <svg width="46" height="46" viewBox="0 0 100 100" fill="none">
-        <path d="M50 5 L58 32 L78 22 L72 45 L95 50 L75 62 L85 85 L60 75 L50 95 L40 75 L15 85 L25 62 L5 50 L28 45 L22 22 L42 32 Z" fill="#00874e"/>
-        <path d="M50 5 L50 95" stroke="#ffffff" stroke-width="2"/>
-      </svg>
-      <div>
-        <div class="brand-title">La Salle</div>
-        <div class="brand-sub">Landscaping & Tree Service</div>
+g1_html = render_bucket_row_html(base_bucket_counts)
+g2_html = render_bucket_row_html(curr_bucket_counts)
+g2_subtitle = "Upload comparison PDF in sidebar to track progress" if not has_comparison else f"{invoices_open} Original Baseline Invoices Open ({invoices_cleared} Invoices Cleared)"
+
+full_dashboard_html = f"""
+<style>
+  .dashboard-wrapper {{
+    background: #0f172a;
+    padding: 20px 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }}
+  .dashboard {{
+    width: 960px;
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+    margin: 0 auto;
+  }}
+  .header {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 24px 36px;
+    background: #ffffff;
+    border-bottom: 2px solid #e2e8f0;
+  }}
+  .brand-group {{
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }}
+  .brand-title {{
+    font-size: 26px;
+    font-weight: 900;
+    color: #00874e;
+    line-height: 1;
+  }}
+  .brand-sub {{
+    font-size: 14px;
+    font-weight: 700;
+    color: #78350f;
+    font-style: italic;
+    margin-top: 4px;
+  }}
+  .header-meta {{
+    text-align: right;
+  }}
+  .header-meta h2 {{
+    font-size: 17px;
+    font-weight: 800;
+    color: #1e293b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+  }}
+  .header-meta p {{
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 4px;
+    font-weight: 500;
+    margin-bottom: 0;
+  }}
+  .summary-strip {{
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    padding: 16px 36px;
+  }}
+  .summary-item {{
+    text-align: center;
+    border-right: 1px solid #e2e8f0;
+  }}
+  .summary-item:last-child {{ border-right: none; }}
+  .summary-item .label {{
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: #64748b;
+    letter-spacing: 0.5px;
+  }}
+  .summary-item .value {{
+    font-size: 24px;
+    font-weight: 900;
+    color: #0f172a;
+    margin-top: 2px;
+  }}
+  .summary-item .value.green {{ color: #00874e; }}
+  .summary-item .value.amber {{ color: #d97706; }}
+  .content {{
+    padding: 30px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+  }}
+  .graphic-card {{
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 20px 24px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  }}
+  .card-top {{
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #f1f5f9;
+  }}
+  .card-top h3 {{
+    font-size: 15px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+  }}
+  .card-top h3.green {{ color: #00874e; }}
+  .card-top h3.amber {{ color: #b45309; }}
+  .card-top span {{
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 600;
+  }}
+  .bucket-row {{
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+  }}
+  .bucket {{
+    border-radius: 10px;
+    padding: 18px 10px;
+    text-align: center;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+  }}
+  .bucket-header {{
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #475569;
+    margin-bottom: 8px;
+  }}
+  .bucket-qty {{
+    font-size: 34px;
+    font-weight: 900;
+    line-height: 1;
+    color: #0f172a;
+  }}
+  .bucket-footer {{
+    font-size: 10px;
+    color: #94a3b8;
+    text-transform: uppercase;
+    margin-top: 8px;
+    font-weight: 600;
+  }}
+  .bucket.b-current {{
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+  }}
+  .bucket.b-current .bucket-qty {{ color: #16a34a; }}
+  .bucket.b-amber {{
+    background: #fffbeb;
+    border-color: #fde68a;
+  }}
+  .bucket.b-amber .bucket-qty {{ color: #d97706; }}
+  .bucket.b-red {{
+    background: #fef2f2;
+    border-color: #fecaca;
+  }}
+  .bucket.b-red .bucket-qty {{ color: #dc2626; }}
+</style>
+
+<div class="dashboard-wrapper">
+  <div class="dashboard">
+    <div class="header">
+      <div class="brand-group">
+        <svg width="46" height="46" viewBox="0 0 100 100" fill="none">
+          <path d="M50 5 L58 32 L78 22 L72 45 L95 50 L75 62 L85 85 L60 75 L50 95 L40 75 L15 85 L25 62 L5 50 L28 45 L22 22 L42 32 Z" fill="#00874e"/>
+          <path d="M50 5 L50 95" stroke="#ffffff" stroke-width="2"/>
+        </svg>
+        <div>
+          <div class="brand-title">La Salle</div>
+          <div class="brand-sub">Landscaping & Tree Service</div>
+        </div>
+      </div>
+      <div class="header-meta">
+        <h2>A/R Aging & Collections Tracker</h2>
+        <p>Due Date Basis &bull; Master {total_baseline_count} Baseline Progress (As of {header_date_str})</p>
       </div>
     </div>
-    <div class="header-meta">
-      <h2>A/R Aging & Collections Tracker</h2>
-      <p>Due Date Basis &bull; Master {total_baseline_count} Baseline Progress (As of {header_date_str})</p>
-    </div>
-  </div>
 
-  <!-- Executive Summary -->
-  <div class="summary-strip">
-    <div class="summary-item">
-      <div class="label">Starting Baseline</div>
-      <div class="value">{total_baseline_count}</div>
-    </div>
-    <div class="summary-item">
-      <div class="label">Invoices Cleared</div>
-      <div class="value green">{invoices_cleared}</div>
-    </div>
-    <div class="summary-item">
-      <div class="label">Remaining Open</div>
-      <div class="value amber">{invoices_open}</div>
-    </div>
-    <div class="summary-item">
-      <div class="label">Resolution Rate</div>
-      <div class="value green">{resolution_pct:.1f}%</div>
-    </div>
-  </div>
-
-  <div class="content">
-    <!-- Graphic 1: Baseline Imported as of 8/31/2026 -->
-    <div class="graphic-card">
-      <div class="card-top">
-        <h3 class="green">Graphic 1: Baseline Open Invoices (As of {base_date_str})</h3>
-        <span>Original Master List: {total_baseline_count} Invoices (${total_baseline_balance:,.2f})</span>
+    <div class="summary-strip">
+      <div class="summary-item">
+        <div class="label">Starting Baseline</div>
+        <div class="value">{total_baseline_count}</div>
       </div>
-      {render_bucket_row_html(base_bucket_counts)}
+      <div class="summary-item">
+        <div class="label">Invoices Cleared</div>
+        <div class="value green">{invoices_cleared}</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Remaining Open</div>
+        <div class="value amber">{invoices_open}</div>
+      </div>
+      <div class="summary-item">
+        <div class="label">Resolution Rate</div>
+        <div class="value green">{resolution_pct:.1f}%</div>
+      </div>
     </div>
 
-    <!-- Graphic 2: Current Progress -->
-    <div class="graphic-card">
-      <div class="card-top">
-        <h3 class="amber">Graphic 2: Baseline Collection Progress (As of {comp_date_str})</h3>
-        <span>{"Upload comparison PDF in sidebar to track progress" if not has_comparison else f"{invoices_open} Original Baseline Invoices Open ({invoices_cleared} Invoices Cleared)"}</span>
+    <div class="content">
+      <div class="graphic-card">
+        <div class="card-top">
+          <h3 class="green">Graphic 1: Baseline Open Invoices (As of {base_date_str})</h3>
+          <span>Original Master List: {total_baseline_count} Invoices (${total_baseline_balance:,.2f})</span>
+        </div>
+        {g1_html}
       </div>
-      {render_bucket_row_html(curr_bucket_counts)}
+
+      <div class="graphic-card">
+        <div class="card-top">
+          <h3 class="amber">Graphic 2: Baseline Collection Progress (As of {comp_date_str})</h3>
+          <span>{g2_subtitle}</span>
+        </div>
+        {g2_html}
+      </div>
     </div>
   </div>
 </div>
 """
 
-st.markdown(dashboard_html, unsafe_allow_html=True)
+# st.html renders raw HTML/CSS without markdown interference
+st.html(full_dashboard_html)
 
 # -----------------------------------------------------------------------------
 # AUDIT DRILLDOWN TABLE
