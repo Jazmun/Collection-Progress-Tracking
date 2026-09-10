@@ -1,4 +1,5 @@
 import io
+import os
 import re
 from datetime import date, datetime
 import pandas as pd
@@ -12,7 +13,7 @@ st.set_page_config(
 )
 
 # -----------------------------------------------------------------------------
-# CSS STYLING (Custom Executive Dashboard Cards)
+# CSS STYLING (Card Layout Matching Mockup)
 # -----------------------------------------------------------------------------
 st.markdown(
     """
@@ -29,7 +30,6 @@ st.markdown(
         max-width: 1200px;
     }
 
-    /* Dashboard Shell Container */
     .dashboard-shell {
         background-color: #ffffff;
         border-radius: 16px;
@@ -39,7 +39,6 @@ st.markdown(
         margin-bottom: 25px;
     }
 
-    /* Header Bar */
     .brand-header-wrap {
         display: flex;
         justify-content: space-between;
@@ -82,7 +81,6 @@ st.markdown(
         margin-top: 4px;
     }
 
-    /* Top Summary Metrics */
     .top-kpi-grid {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -115,7 +113,6 @@ st.markdown(
     .kpi-val-green   { color: #0b6638; }
     .kpi-val-amber   { color: #d97706; }
 
-    /* Section Frame */
     .graphic-frame {
         border: 1.5px solid #e2e8f0;
         border-radius: 12px;
@@ -149,7 +146,6 @@ st.markdown(
         color: #64748b;
     }
 
-    /* Aging Buckets Row */
     .buckets-grid {
         display: grid;
         grid-template-columns: repeat(6, 1fr);
@@ -183,7 +179,6 @@ st.markdown(
         text-transform: uppercase;
     }
 
-    /* Specific Card Color Themes */
     .card-current {
         background-color: #f0fdf4;
         border: 1px solid #bbf7d0;
@@ -221,9 +216,11 @@ st.markdown(
 )
 
 # -----------------------------------------------------------------------------
-# PARSING & DATA NORMALIZATION
+# CONSTANTS & HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
-EXPECTED_COLUMNS = ["Invoice Number", "Customer", "Invoice Date", "Due Date", "Balance Due"]
+BUCKET_ORDER = ["Current", "1-30", "31-60", "61-90", "91-120", "120+"]
+BASELINE_CSV_PATH = "baseline_279_invoices.csv"
+BASELINE_DATE = date(2026, 8, 31)
 
 def clean_numeric(val):
     if pd.isna(val) or val is None:
@@ -235,57 +232,13 @@ def clean_numeric(val):
         return 0.0
 
 def parse_date(date_str):
-    date_str = date_str.strip()
-    for fmt in ("%m/%d/%y", "%m/%d/%Y"):
+    date_str = str(date_str).strip()
+    for fmt in ("%Y-%m-%d", "%m/%d/%y", "%m/%d/%Y"):
         try:
             return datetime.strptime(date_str, fmt).date()
         except ValueError:
             continue
     return None
-
-def parse_ar_pdf(file_bytes):
-    records = []
-    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        for page in pdf.pages:
-            tables = page.extract_tables()
-            for table in tables:
-                for row in table:
-                    cells = [c.strip() if c else "" for c in row]
-                    if len(cells) < 8:
-                        continue
-
-                    # Handle cells with newline-stacked records (e.g. multi-invoice cells)
-                    inv_dates = cells[0].split("\n")
-                    due_dates = cells[1].split("\n")
-                    inv_nums = cells[2].split("\n")
-                    customers = cells[3].split("\n")
-                    balances = cells[7].split("\n")
-
-                    num_entries = max(len(inv_nums), len(due_dates), len(balances))
-                    for i in range(num_entries):
-                        inv_num_raw = inv_nums[i].strip() if i < len(inv_nums) else ""
-                        due_date_raw = due_dates[i].strip() if i < len(due_dates) else ""
-                        inv_date_raw = inv_dates[i].strip() if i < len(inv_dates) else ""
-                        cust_raw = customers[i].strip() if i < len(customers) else (customers[0] if customers else "")
-                        bal_raw = balances[i].strip() if i < len(balances) else ""
-
-                        due_dt = parse_date(due_date_raw)
-                        inv_dt = parse_date(inv_date_raw) or due_dt
-
-                        if inv_num_raw.isdigit() and due_dt is not None:
-                            records.append({
-                                "Invoice Number": inv_num_raw,
-                                "Customer": cust_raw,
-                                "Invoice Date": inv_dt,
-                                "Due Date": due_dt,
-                                "Balance Due": clean_numeric(bal_raw),
-                            })
-
-    if not records:
-        return pd.DataFrame(columns=EXPECTED_COLUMNS)
-
-    df = pd.DataFrame(records)
-    return df.drop_duplicates(subset=["Invoice Number"])
 
 def assign_bucket(due_date, as_of_date):
     days_past = (as_of_date - due_date).days
@@ -302,10 +255,44 @@ def assign_bucket(due_date, as_of_date):
     else:
         return "120+"
 
-BUCKET_ORDER = ["Current", "1-30", "31-60", "61-90", "91-120", "120+"]
+def parse_new_pdf(file_bytes):
+    """Extract open invoices from the newly uploaded PDF."""
+    records = []
+    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+        for page in pdf.pages:
+            tables = page.extract_tables()
+            for table in tables:
+                for row in table:
+                    cells = [c.strip() if c else "" for c in row]
+                    if len(cells) < 8:
+                        continue
+
+                    due_dates = cells[1].split("\n")
+                    inv_nums = cells[2].split("\n")
+                    balances = cells[7].split("\n")
+
+                    num_entries = max(len(inv_nums), len(due_dates), len(balances))
+                    for i in range(num_entries):
+                        inv_num_raw = inv_nums[i].strip() if i < len(inv_nums) else ""
+                        due_date_raw = due_dates[i].strip() if i < len(due_dates) else ""
+                        bal_raw = balances[i].strip() if i < len(balances) else ""
+
+                        due_dt = parse_date(due_date_raw)
+
+                        if inv_num_raw.isdigit() and due_dt is not None:
+                            records.append({
+                                "Invoice Number": str(inv_num_raw),
+                                "Due Date": due_dt,
+                                "Balance Due": clean_numeric(bal_raw),
+                            })
+
+    if not records:
+        return pd.DataFrame(columns=["Invoice Number", "Due Date", "Balance Due"])
+
+    df = pd.DataFrame(records)
+    return df.drop_duplicates(subset=["Invoice Number"])
 
 def render_bucket_grid(counts_dict):
-    """Render the 6 stylized cards in one unified HTML grid."""
     grid_html = """<div class="buckets-grid">"""
     configs = [
         ("Current", "card-current", "NOT DUE YET"),
@@ -329,52 +316,44 @@ def render_bucket_grid(counts_dict):
     return grid_html
 
 # -----------------------------------------------------------------------------
-# SIDEBAR CONTROLS
+# LOAD MASTER BASELINE
 # -----------------------------------------------------------------------------
-st.sidebar.markdown("### ⚙️ Data Input & Controls")
-
-baseline_file = st.sidebar.file_uploader("1. Master Baseline PDF", type=["pdf"], key="baseline_pdf")
-new_file = st.sidebar.file_uploader("2. Open Invoices PDF (Comparison)", type=["pdf"], key="new_pdf")
-
-baseline_date = st.sidebar.date_input("Baseline Date", value=date(2026, 8, 31))
-current_evaluation_date = st.sidebar.date_input("Comparison / Reconciliation Date", value=date(2026, 9, 4))
-
-if not baseline_file:
-    st.info("👈 Please upload your 8/31/2026 baseline PDF in the sidebar to populate the dashboard.")
+if not os.path.exists(BASELINE_CSV_PATH):
+    st.error(f"Missing master baseline file: `{BASELINE_CSV_PATH}`. Please upload it to your repository.")
     st.stop()
 
-# -----------------------------------------------------------------------------
-# BASELINE PARSING & COMPUTATION
-# -----------------------------------------------------------------------------
-df_baseline = parse_ar_pdf(baseline_file.read())
+df_baseline = pd.read_csv(BASELINE_CSV_PATH, dtype={"Invoice Number": str})
+df_baseline["Due Date"] = df_baseline["Due Date"].apply(parse_date)
+df_baseline["Balance Due"] = df_baseline["Balance Due"].astype(float)
+df_baseline["Baseline Bucket"] = df_baseline["Due Date"].apply(lambda d: assign_bucket(d, BASELINE_DATE))
 
-if df_baseline.empty:
-    st.error("No valid invoice rows could be extracted from the baseline PDF. Please check the PDF formatting.")
-    st.stop()
-
-df_baseline["Baseline Bucket"] = df_baseline["Due Date"].apply(lambda d: assign_bucket(d, baseline_date))
 total_baseline_count = len(df_baseline)
 total_baseline_balance = df_baseline["Balance Due"].sum()
-
 base_bucket_counts = df_baseline["Baseline Bucket"].value_counts().reindex(BUCKET_ORDER, fill_value=0).to_dict()
 
 # -----------------------------------------------------------------------------
-# COMPARISON EVALUATION
+# SIDEBAR RECONCILIATION CONTROLS
+# -----------------------------------------------------------------------------
+st.sidebar.markdown("### ⚙️ Collection Reconciliation")
+new_file = st.sidebar.file_uploader("Upload New Open Invoices PDF", type=["pdf"], key="new_pdf")
+current_evaluation_date = st.sidebar.date_input("Comparison / Reconciliation Date", value=date(2026, 9, 4))
+
+# -----------------------------------------------------------------------------
+# EVALUATE COLLECTION PROGRESS
 # -----------------------------------------------------------------------------
 has_comparison = new_file is not None
 
 if has_comparison:
-    df_new = parse_ar_pdf(new_file.read())
+    df_new = parse_new_pdf(new_file.read())
     
     if df_new.empty:
-        st.warning("Comparison PDF was uploaded but no invoice rows could be parsed. Showing baseline only.")
+        st.sidebar.warning("PDF uploaded but no valid invoice rows matched format. Displaying baseline only.")
         has_comparison = False
     else:
-        # Keep only invoice numbers that exist in the baseline report
         baseline_nums = set(df_baseline["Invoice Number"])
+        # Only retain invoices that belong to the original 279 baseline
         df_new_matched = df_new[df_new["Invoice Number"].isin(baseline_nums)].copy()
 
-        # Merge onto baseline
         merged = pd.merge(
             df_baseline,
             df_new_matched[["Invoice Number", "Balance Due"]],
@@ -383,15 +362,12 @@ if has_comparison:
             suffixes=("_base", "_new"),
         )
 
-        # Invoices not in new report are fully resolved / cleared
+        # Invoices missing from the new statement have been cleared/paid
         merged["Balance Due_new"] = merged["Balance Due_new"].fillna(0.0)
         merged["Cleared Amount"] = (merged["Balance Due_base"] - merged["Balance Due_new"]).clip(lower=0.0)
-        
-        # An invoice is active/open if its balance remains > 0.01
         merged["Is_Open"] = merged["Balance Due_new"] > 0.01
-        open_df = merged[merged["Is_Open"]].copy()
 
-        # Calculate current aging bucket for still-open invoices
+        open_df = merged[merged["Is_Open"]].copy()
         open_df["Current Bucket"] = open_df["Due Date"].apply(lambda d: assign_bucket(d, current_evaluation_date))
         curr_bucket_counts = open_df["Current Bucket"].value_counts().reindex(BUCKET_ORDER, fill_value=0).to_dict()
 
@@ -399,22 +375,20 @@ if has_comparison:
         invoices_cleared = total_baseline_count - invoices_open
         resolution_pct = (invoices_cleared / total_baseline_count * 100) if total_baseline_count > 0 else 0.0
 else:
-    # Baseline defaults when comparison has not yet been uploaded
     invoices_cleared = 0
     invoices_open = total_baseline_count
     resolution_pct = 0.0
     curr_bucket_counts = {k: 0 for k in BUCKET_ORDER}
 
 # -----------------------------------------------------------------------------
-# DASHBOARD CARD RENDERING
+# RENDER DASHBOARD
 # -----------------------------------------------------------------------------
 header_sub_date = current_evaluation_date.strftime("%b %-d, %Y")
-base_date_str = baseline_date.strftime("%m/%d/%Y")
+base_date_str = BASELINE_DATE.strftime("%m/%d/%Y")
 eval_date_str = current_evaluation_date.strftime("%m/%d/%Y")
 
 shell_html = f"""
 <div class="dashboard-shell">
-    <!-- Header -->
     <div class="brand-header-wrap">
         <div>
             <div class="brand-logo-text">
@@ -428,7 +402,6 @@ shell_html = f"""
         </div>
     </div>
 
-    <!-- Top KPI Row -->
     <div class="top-kpi-grid">
         <div class="kpi-col">
             <div class="kpi-label">Starting Baseline</div>
@@ -448,7 +421,6 @@ shell_html = f"""
         </div>
     </div>
 
-    <!-- Graphic 1: Baseline -->
     <div class="graphic-frame">
         <div class="graphic-header">
             <div class="graphic-title-green">Graphic 1: Baseline Open Invoices (As of {base_date_str})</div>
@@ -457,7 +429,6 @@ shell_html = f"""
         {render_bucket_grid(base_bucket_counts)}
     </div>
 
-    <!-- Graphic 2: Collection Progress -->
     <div class="graphic-frame">
         <div class="graphic-header">
             <div class="graphic-title-orange">Graphic 2: Baseline Collection Progress (As of {eval_date_str})</div>
@@ -473,9 +444,9 @@ shell_html = f"""
 st.markdown(shell_html, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# AUDIT & RECONCILIATION TABLE
+# AUDIT & LEDGER DRILLDOWN
 # -----------------------------------------------------------------------------
-with st.expander("🔍 View Detailed Invoice Ledger & Match Status", expanded=False):
+with st.expander("🔍 View Detailed Invoice Ledger & Reconciliation Status", expanded=False):
     if has_comparison:
         audit_table = merged[[
             "Invoice Number",
@@ -509,7 +480,7 @@ with st.expander("🔍 View Detailed Invoice Ledger & Match Status", expanded=Fa
 
         filter_sel = st.radio(
             "Filter rows:", ["All Baseline Invoices", "Only Remaining Open", "Only Cleared / Paid"],
-            horizontal=True
+            horizontal=True,
         )
         if filter_sel == "Only Remaining Open":
             audit_table = audit_table[audit_table["Status"] == "Active / Open"]
